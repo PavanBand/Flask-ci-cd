@@ -2,56 +2,57 @@ pipeline {
     agent any
 
     environment {
-        PYTHON = "C:\\Users\\goudp\\AppData\\Local\\Programs\\Python\\Python312\\python.exe"
-        DOCKERHUB = credentials('dockerhub-username')      // Replace with your Docker Hub credential ID
-        DOCKERHUB_PSW = credentials('dockerhub-password')  // Replace with your Docker Hub password ID
+        // Docker Hub credentials
+        DOCKERHUB_CRED = credentials('dockerhub-password')
+        IMAGE_NAME = "pavanbandi07/flask-ci-cd"
+        PYTHON_PATH = "C:\\Users\\goudp\\AppData\\Local\\Programs\\Python\\Python312\\python.exe"
     }
 
     stages {
         stage('Checkout SCM') {
             steps {
-                checkout scm
+                echo "Checking out from GitHub..."
+                git url: 'https://github.com/PavanBand/Flask-ci-cd.git', branch: 'main', credentialsId: 'github-credentials'
             }
         }
 
         stage('Install Dependencies') {
             steps {
                 echo "Installing Python dependencies..."
-                bat "\"${env.PYTHON}\" -m pip install --upgrade pip"
-                bat "\"${env.PYTHON}\" -m pip install -r requirements.txt"
+                bat "${env.PYTHON_PATH} -m pip install --upgrade pip"
+                bat "${env.PYTHON_PATH} -m pip install -r requirements.txt"
             }
         }
 
         stage('Run Tests') {
             steps {
-                echo "Running Python Unit Tests..."
-                // Use full Python path to avoid PATH issues
-                bat "\"${env.PYTHON}\" -m unittest discover -s tests -p \"*.py\""
+                echo "Running unit tests..."
+                // Make sure you are in the correct directory
+                dir('flask-ci-cd') {
+                    bat "${env.PYTHON_PATH} -m unittest discover -s tests -p '*.py'"
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                echo "Building Docker Image..."
-                bat "docker build -t flask-ci-cd:latest ."
+                echo "Building Docker image..."
+                bat "docker build -t ${env.IMAGE_NAME}:latest ."
             }
         }
 
         stage('Push to Docker Hub') {
             steps {
-                echo "Logging into Docker Hub..."
-                bat "docker login -u ${DOCKERHUB} -p ${DOCKERHUB_PSW}"
-                bat "docker tag flask-ci-cd:latest ${DOCKERHUB}/flask-ci-cd:latest"
-                bat "docker push ${DOCKERHUB}/flask-ci-cd:latest"
+                echo "Logging in and pushing to Docker Hub..."
+                bat "docker login -u ${env.DOCKERHUB_CRED_USR} -p ${env.DOCKERHUB_CRED_PSW}"
+                bat "docker push ${env.IMAGE_NAME}:latest"
             }
         }
 
         stage('Deploy Locally') {
             steps {
-                echo "Deploying locally using Docker..."
-                bat "docker stop flask-ci-cd || echo No container to stop"
-                bat "docker rm flask-ci-cd || echo No container to remove"
-                bat "docker run -d -p 5000:5000 --name flask-ci-cd ${DOCKERHUB}/flask-ci-cd:latest"
+                echo "Running Docker container locally..."
+                bat "docker run -d -p 5000:5000 ${env.IMAGE_NAME}:latest"
             }
         }
     }
@@ -60,11 +61,11 @@ pipeline {
         always {
             echo "Pipeline finished."
         }
-        success {
-            echo "Pipeline succeeded!"
-        }
         failure {
             echo "Pipeline failed. Check logs for details."
+        }
+        success {
+            echo "Pipeline succeeded!"
         }
     }
 }
