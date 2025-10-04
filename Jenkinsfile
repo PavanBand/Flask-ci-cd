@@ -2,45 +2,58 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'pavanbandi07/flask-app'
-        IMAGE_TAG  = 'latest'
-        PYTHON_BIN = 'C:\\Users\\goudp\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'
-        // NOTE: Keep dockerhub credential ID below in sync with what you created in Jenkins.
-        DOCKER_CRED_ID = 'dockerhub-password'
-        GIT_CRED_ID = 'github-credentials'
+        // Adjust these IDs/paths if your setup differs
+        GIT_CRED_ID   = 'github-credentiales'        // your GitHub credential id
+        DOCKER_CRED_ID= 'dockerhub-password'     // your Docker Hub credential id (username/password)
+        IMAGE_NAME    = 'pavanbandi07/flask-app'
+        IMAGE_TAG     = 'latest'
+        PYTHON_BIN    = 'C:\\Users\\goudp\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                echo 'Checking out repository...'
+                echo "Checking out repository..."
                 git url: 'https://github.com/PavanBand/Flask-ci-cd.git', branch: 'main', credentialsId: "${env.GIT_CRED_ID}"
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                echo 'Installing Python dependencies...'
+                echo "Installing Python dependencies..."
                 dir('flask-ci-cd') {
-                    bat "\"${env.PYTHON_BIN}\" -m pip install --upgrade pip"
-                    bat "\"${env.PYTHON_BIN}\" -m pip install -r requirements.txt"
+                    bat "\"${PYTHON_BIN}\" -m pip install --upgrade pip"
+                    bat "\"${PYTHON_BIN}\" -m pip install -r requirements.txt"
                 }
             }
         }
 
         stage('Run Tests') {
             steps {
-                echo 'Running unit tests (if any)...'
+                echo "Running unit tests (capture output and status)..."
                 dir('flask-ci-cd') {
                     script {
-                        // run tests but capture return status so "no tests" won't cause pipeline failure
-                        def rc = bat(script: "\"${env.PYTHON_BIN}\" -m unittest discover -s tests -p '*.py'", returnStatus: true)
-                        if (rc == 0) {
+                        def cmd = "\"${PYTHON_BIN}\" -m unittest discover -s tests -p \"*.py\""
+
+                        // 1) run and get status (so non-zero won't auto-fail)
+                        def rc = bat(script: cmd, returnStatus: true)
+
+                        // 2) capture stdout for diagnosis (run again to get output)
+                        def out = bat(script: cmd, returnStdout: true).trim()
+
+                        echo "unittest exit code: ${rc}"
+                        echo "---- unittest output start ----"
+                        echo out
+                        echo "---- unittest output end ----"
+
+                        // Decision logic:
+                        if (out.contains("NO TESTS RAN") || out =~ /Ran 0 tests/) {
+                            echo "No tests detected — continuing pipeline."
+                        } else if (rc == 0) {
                             echo "Tests passed."
-                        } else if (rc == 1) {
-                            echo "No tests found or tests skipped (unittest returned 1). Continuing..."
                         } else {
-                            error "Unit tests failed (exit code ${rc})."
+                            // any other non-zero + not 'no tests' -> fail
+                            error "Unit tests failed (exit code ${rc}). See output above."
                         }
                     }
                 }
@@ -49,7 +62,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                echo 'Building Docker image...'
+                echo "Building Docker image..."
                 dir('flask-ci-cd') {
                     bat "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
                 }
@@ -58,10 +71,9 @@ pipeline {
 
         stage('Push to Docker Hub') {
             steps {
-                echo 'Login to Docker Hub and push image...'
-                // Use withCredentials mapping to safe env vars DOCKER_USER / DOCKER_PSW
+                echo "Logging in to Docker Hub and pushing image..."
                 withCredentials([usernamePassword(credentialsId: "${env.DOCKER_CRED_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PSW')]) {
-                    // login (avoid leaving password in visible logs)
+                    // login
                     bat "docker login -u %DOCKER_USER% -p %DOCKER_PSW%"
                     bat "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
                 }
@@ -70,7 +82,7 @@ pipeline {
 
         stage('Deploy Locally') {
             steps {
-                echo 'Deploying container locally (stops/removes old one if exists)...'
+                echo "Deploying container locally (stop/remove old if present)..."
                 dir('flask-ci-cd') {
                     bat "docker stop flask-app || echo 'no running container to stop'"
                     bat "docker rm flask-app || echo 'no container to remove'"
@@ -81,7 +93,7 @@ pipeline {
     }
 
     post {
-        success { echo 'Pipeline Succeeded.' }
-        failure { echo 'Pipeline Failed — check console output.' }
+        success { echo "Pipeline succeeded." }
+        failure { echo "Pipeline failed — check console output for details." }
     }
 }
