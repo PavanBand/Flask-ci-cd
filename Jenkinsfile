@@ -1,40 +1,57 @@
 pipeline {
-  agent any
-  environment {
-    IMAGE = "pavanbandi07/flask-ci:${GIT_COMMIT}"
-  }
-  stages {
-    stage('Checkout') {
-      steps { checkout scm }
-    }
-    stage('Install Dependencies') {
-      steps {
-        sh 'python -m pip install -r requirements.txt'
-      }
-    }
-    stage('Run Tests') {
-      steps {
-        sh 'pytest tests/ || true'
-      }
-    }
-    stage('Build Docker Image') {
-      steps {
-        sh 'docker build -t $IMAGE .'
-      }
-    }
-    stage('Push to Docker Hub') {
-      steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-          sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-          sh 'docker push $IMAGE'
+    agent any
+
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials') // Your Docker Hub credentials in Jenkins
+    } 
+
+    stages {
+        stage('Install Dependencies') {
+            steps {
+                echo 'Installing Python dependencies...'
+                bat 'pip install -r requirements.txt'
+            }
         }
-      }
+
+        stage('Run Tests') {
+            steps {
+                echo 'Running unit tests...'
+                bat 'pytest tests\\'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo 'Building Docker image...'
+                bat 'docker build -t flask-app:latest .'
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                echo 'Pushing Docker image to Docker Hub...'
+                bat """
+                docker login -u %DOCKERHUB_USERNAME% -p %DOCKERHUB_PASSWORD%
+                docker tag flask-app:latest yourdockerhubusername/flask-app:latest
+                docker push yourdockerhubusername/flask-app:latest
+                """
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo 'Deployment step placeholder...'
+                // Add your deployment commands here (e.g., docker run, ECS task, etc.)
+            }
+        }
     }
-    stage('Deploy') {
-      steps {
-        sh 'docker rm -f flask_ci || true'
-        sh 'docker run -d --name flask_ci -p 5000:5000 $IMAGE'
-      }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Check the console output for errors.'
+        }
     }
-  }
 }
