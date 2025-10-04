@@ -12,7 +12,7 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 echo 'Installing Python dependencies...'
-                bat 'pip install -r requirements.txt'
+                bat 'C:\Users\Pavan\AppData\Local\Microsoft\WindowsApps\python.exe -r requirements.txt'
             }
         }
 
