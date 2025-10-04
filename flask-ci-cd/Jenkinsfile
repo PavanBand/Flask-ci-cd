@@ -1,7 +1,7 @@
 pipeline {
   agent any
   environment {
-    IMAGE = "yourdockerhubusername/flask-ci:${GIT_COMMIT}"
+    IMAGE = "pavanbandi07/flask-ci:${GIT_COMMIT}"
   }
   stages {
     stage('Checkout') {
