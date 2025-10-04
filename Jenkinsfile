@@ -16,23 +16,25 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
-            steps {
-                echo "Installing Python dependencies..."
-                bat "${env.PYTHON_PATH} -m pip install --upgrade pip"
-                bat "${env.PYTHON_PATH} -m pip install -r requirements.txt"
-            }
+    stage('Install Dependencies') {
+    steps {
+        echo 'Installing Python dependencies...'
+        dir('flask-ci-cd') {
+            bat "${PYTHON_PATH} -m pip install --upgrade pip"
+            bat "${PYTHON_PATH} -m pip install -r requirements.txt"
         }
+    }
+}
 
-        stage('Run Tests') {
-            steps {
-                echo "Running unit tests..."
-                // Make sure you are in the correct directory
-                dir('flask-ci-cd') {
-                    bat "${env.PYTHON_PATH} -m unittest discover -s tests -p '*.py'"
-                }
-            }
+stage('Run Tests') {
+    steps {
+        echo 'Running Tests...'
+        dir('flask-ci-cd') {
+            bat "${PYTHON_PATH} -m unittest discover -s tests -p '*.py'"
         }
+    }
+}
+
 
         stage('Build Docker Image') {
             steps {
