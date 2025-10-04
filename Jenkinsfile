@@ -32,8 +32,8 @@ pipeline {
                 echo 'Pushing Docker image to Docker Hub...'
                 bat """
                 docker login -u %DOCKERHUB_USERNAME% -p %DOCKERHUB_PASSWORD%
-                docker tag flask-app:latest yourdockerhubusername/flask-app:latest
-                docker push yourdockerhubusername/flask-app:latest
+                docker tag flask-app:latest pavanbandi07/flask-app:latest
+                docker push pavanbandi07/flask-app:latest
                 """
             }
         }
