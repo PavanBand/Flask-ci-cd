@@ -2,12 +2,11 @@ pipeline {
     agent any
 
     environment {
-        // Adjust these IDs/paths if your setup differs
-        GIT_CRED_ID   = 'github-credentiales'        // your GitHub credential id
-        DOCKER_CRED_ID= 'dockerhub-password'     // your Docker Hub credential id (username/password)
-        IMAGE_NAME    = 'pavanbandi07/flask-app'
-        IMAGE_TAG     = 'latest'
-        PYTHON_BIN    = 'C:\\Users\\goudp\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'
+        GIT_CRED_ID    = 'github-credentials'        // adjust if different
+        DOCKER_CRED_ID = 'dockerhub-credentials'     // must match Jenkins credential ID
+        IMAGE_NAME     = 'pavanbandi07/flask-app'
+        IMAGE_TAG      = 'latest'
+        PYTHON_BIN     = 'C:\\Users\\goudp\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'
     }
 
     stages {
@@ -30,30 +29,39 @@ pipeline {
 
         stage('Run Tests') {
             steps {
-                echo "Running unit tests (capture output and status)..."
+                echo "Running unit tests (capture output + exit code)..."
                 dir('flask-ci-cd') {
                     script {
-                        def cmd = "\"${PYTHON_BIN}\" -m unittest discover -s tests -p \"*.py\""
+                        // ensure no stale file
+                        bat script: 'if exist test_output.txt del test_output.txt', returnStatus: true
 
-                        // 1) run and get status (so non-zero won't auto-fail)
-                        def rc = bat(script: cmd, returnStatus: true)
+                        // Run unittest once, capture output to test_output.txt, and ensure we append the ERRORLEVEL so we can read it.
+                        // The nested cmd /c and quoting ensures it runs properly on Windows agents.
+                        bat script: "cmd /c \"\"${PYTHON_BIN}\" -m unittest discover -s tests -p \"*.py\" > test_output.txt 2>&1 || (echo RETURNED:%ERRORLEVEL% >> test_output.txt)\""
 
-                        // 2) capture stdout for diagnosis (run again to get output)
-                        def out = bat(script: cmd, returnStdout: true).trim()
-
-                        echo "unittest exit code: ${rc}"
+                        // Read the file back
+                        def out = readFile('test_output.txt').trim()
                         echo "---- unittest output start ----"
                         echo out
                         echo "---- unittest output end ----"
 
-                        // Decision logic:
-                        if (out.contains("NO TESTS RAN") || out =~ /Ran 0 tests/) {
-                            echo "No tests detected — continuing pipeline."
-                        } else if (rc == 0) {
-                            echo "Tests passed."
+                        // Look for RETURNED:<code>
+                        def rc = 0
+                        def m = out =~ /RETURNED:(\\d+)/
+                        if (m) {
+                            rc = (m[0][1] as Integer)
                         } else {
-                            // any other non-zero + not 'no tests' -> fail
-                            error "Unit tests failed (exit code ${rc}). See output above."
+                            // If not present, assume 0 (success) — but still check text for "Ran 0 tests"
+                            rc = 0
+                        }
+
+                        // Decide what to do:
+                        if (out.contains('Ran 0 tests') || out.contains('NO TESTS RAN')) {
+                            echo "No tests were found. Continuing pipeline."
+                        } else if (rc == 0) {
+                            echo "Unit tests passed (exit 0)."
+                        } else {
+                            error "Unit tests failed with exit code ${rc}. See test_output.txt content above."
                         }
                     }
                 }
@@ -73,7 +81,7 @@ pipeline {
             steps {
                 echo "Logging in to Docker Hub and pushing image..."
                 withCredentials([usernamePassword(credentialsId: "${env.DOCKER_CRED_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PSW')]) {
-                    // login
+                    // use variables in Windows bat
                     bat "docker login -u %DOCKER_USER% -p %DOCKER_PSW%"
                     bat "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
                 }
@@ -94,6 +102,6 @@ pipeline {
 
     post {
         success { echo "Pipeline succeeded." }
-        failure { echo "Pipeline failed — check console output for details." }
+        failure { echo "Pipeline failed. Check console output and test_output.txt for details." }
     }
 }
