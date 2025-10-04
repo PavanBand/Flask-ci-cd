@@ -1,10 +1,11 @@
 pipeline {
     agent any
 
-    environment {
-        DOCKERHUB = credentials('dockerhub-credentials') // Docker Hub username/password credential ID
-        PYTHON = "C:\\Users\\Pavan\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe"
-    }
+ environment {
+    PYTHON = "C:\\Users\\goudp\\AppData\\Local\\Programs\\Python\\Python312\\python.exe"
+    DOCKERHUB = credentials('dockerhub-credentials')
+}
+
 
     stages {
         stage('Checkout SCM') {
