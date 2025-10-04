@@ -26,11 +26,12 @@ pipeline {
     }
 }
 
+
 stage('Run Tests') {
     steps {
         echo 'Running Tests...'
         dir('flask-ci-cd') {
-            bat "${PYTHON_PATH} -m unittest discover -s tests -p '*.py'"
+            bat "${PYTHON_PATH} -m unittest discover -s tests -p 'test_*.py'"
         }
     }
 }
