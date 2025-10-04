@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        GIT_CRED_ID    = 'github-credentials'        // adjust if different
-        DOCKER_CRED_ID = 'dockerhub-credentials'     // must match Jenkins credential ID
+        GIT_CRED_ID    = 'github-credentials'        // update if your GitHub credential ID differs
+        DOCKER_CRED_ID = 'dockerhub-credentials'     // must match Jenkins credential ID you created
         IMAGE_NAME     = 'pavanbandi07/flask-app'
         IMAGE_TAG      = 'latest'
         PYTHON_BIN     = 'C:\\Users\\goudp\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'
@@ -32,36 +32,26 @@ pipeline {
                 echo "Running unit tests (capture output + exit code)..."
                 dir('flask-ci-cd') {
                     script {
-                        // ensure no stale file
                         bat script: 'if exist test_output.txt del test_output.txt', returnStatus: true
 
-                        // Run unittest once, capture output to test_output.txt, and ensure we append the ERRORLEVEL so we can read it.
-                        // The nested cmd /c and quoting ensures it runs properly on Windows agents.
+                        // Run tests and append the return code to the same file
                         bat script: "cmd /c \"\"${PYTHON_BIN}\" -m unittest discover -s tests -p \"*.py\" > test_output.txt 2>&1 || (echo RETURNED:%ERRORLEVEL% >> test_output.txt)\""
 
-                        // Read the file back
                         def out = readFile('test_output.txt').trim()
                         echo "---- unittest output start ----"
                         echo out
                         echo "---- unittest output end ----"
 
-                        // Look for RETURNED:<code>
                         def rc = 0
-                        def m = out =~ /RETURNED:(\\d+)/
-                        if (m) {
-                            rc = (m[0][1] as Integer)
-                        } else {
-                            // If not present, assume 0 (success) — but still check text for "Ran 0 tests"
-                            rc = 0
-                        }
+                        def m = out =~ /RETURNED:(\d+)/
+                        if (m) { rc = (m[0][1] as Integer) }
 
-                        // Decide what to do:
                         if (out.contains('Ran 0 tests') || out.contains('NO TESTS RAN')) {
-                            echo "No tests were found. Continuing pipeline."
+                            echo "No tests found — continuing."
                         } else if (rc == 0) {
-                            echo "Unit tests passed (exit 0)."
+                            echo "Tests passed."
                         } else {
-                            error "Unit tests failed with exit code ${rc}. See test_output.txt content above."
+                            error "Unit tests failed (exit ${rc})."
                         }
                     }
                 }
@@ -79,9 +69,9 @@ pipeline {
 
         stage('Push to Docker Hub') {
             steps {
-                echo "Logging in to Docker Hub and pushing image..."
+                echo "Login to Docker Hub and push image..."
                 withCredentials([usernamePassword(credentialsId: "${env.DOCKER_CRED_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PSW')]) {
-                    // use variables in Windows bat
+                    // Login (masked)
                     bat "docker login -u %DOCKER_USER% -p %DOCKER_PSW%"
                     bat "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
                 }
@@ -92,16 +82,38 @@ pipeline {
             steps {
                 echo "Deploying container locally (stop/remove old if present)..."
                 dir('flask-ci-cd') {
-                    bat "docker stop flask-app || echo 'no running container to stop'"
-                    bat "docker rm flask-app || echo 'no container to remove'"
-                    bat "docker run -d -p 5000:5000 --name flask-app ${IMAGE_NAME}:${IMAGE_TAG}"
+                    script {
+                        // stop if running (capture non-zero and continue)
+                        def stopRc = bat(script: 'docker stop flask-app', returnStatus: true)
+                        if (stopRc != 0) {
+                            echo "No running container to stop (exit ${stopRc}). Continuing..."
+                        } else {
+                            echo "Stopped existing container."
+                        }
+
+                        // remove if exists (capture non-zero and continue)
+                        def rmRc = bat(script: 'docker rm flask-app', returnStatus: true)
+                        if (rmRc != 0) {
+                            echo "No container to remove (exit ${rmRc}). Continuing..."
+                        } else {
+                            echo "Removed existing container."
+                        }
+
+                        // run the container (this should error/exit non-zero if docker daemon problems exist)
+                        def runRc = bat(script: "docker run -d -p 5000:5000 --name flask-app ${IMAGE_NAME}:${IMAGE_TAG}", returnStatus: true)
+                        if (runRc != 0) {
+                            error "Failed to start container (docker run exit ${runRc})."
+                        } else {
+                            echo "Container started successfully."
+                        }
+                    }
                 }
             }
         }
     }
 
     post {
-        success { echo "Pipeline succeeded." }
-        failure { echo "Pipeline failed. Check console output and test_output.txt for details." }
+        success { echo "Pipeline completed successfully." }
+        failure { echo "Pipeline FAILED — check console output for details." }
     }
 }
