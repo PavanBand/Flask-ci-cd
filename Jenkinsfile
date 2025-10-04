@@ -32,12 +32,12 @@ stage('Install Dependencies') {
 }
 
 
-        stage('Run Tests') {
-            steps {
-                echo 'Running Tests...'
-                bat "${env.PYTHON} -m unittest discover"
-            }
-        }
+stage('Run Tests') {
+    steps {
+        echo 'Running Tests...'
+        bat 'C:\\Users\\goudp\\AppData\\Local\\Programs\\Python\\Python312\\python.exe -m unittest discover -s flask-ci-cd\\tests -p "*.py"'
+    }
+}
 
         stage('Build Docker Image') {
             steps {
