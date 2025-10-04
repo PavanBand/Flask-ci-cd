@@ -21,13 +21,16 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
-            steps {
-                echo 'Installing Python dependencies...'
-                bat "${env.PYTHON} -m pip install --upgrade pip"
-                bat "${env.PYTHON} -m pip install -r requirements.txt"
-            }
+stage('Install Dependencies') {
+    steps {
+        echo "Installing Python dependencies..."
+        dir('flask-ci-cd') {
+            bat "C:\\Users\\goudp\\AppData\\Local\\Programs\\Python\\Python312\\python.exe -m pip install --upgrade pip"
+            bat "C:\\Users\\goudp\\AppData\\Local\\Programs\\Python\\Python312\\python.exe -m pip install -r requirements.txt"
         }
+    }
+}
+
 
         stage('Run Tests') {
             steps {
