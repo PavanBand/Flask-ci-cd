@@ -2,8 +2,11 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('pavanbandi07') // Your Docker Hub credentials in Jenkins
-    } 
+        // Docker Hub credentials stored in Jenkins
+        DOCKERHUB = credentials('dockerhub-credentials')
+        IMAGE_NAME = 'flask-app'
+        DOCKER_USERNAME = 'pavanbandi07'
+    }
 
     stages {
         stage('Install Dependencies') {
@@ -23,35 +26,37 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo 'Building Docker image...'
-                bat 'docker build -t flask-app:latest .'
+                bat """
+                docker build -t %IMAGE_NAME%:latest .
+                """
             }
         }
 
         stage('Push to Docker Hub') {
             steps {
-                echo 'Pushing Docker image to Docker Hub...'
+                echo 'Logging in to Docker Hub and pushing image...'
                 bat """
-                docker login -u %DOCKERHUB_USERNAME% -p %DOCKERHUB_PASSWORD%
-                docker tag flask-app:latest pavanbandi07/flask-app:latest
-                docker push pavanbandi07/flask-app:latest
+                docker login -u %DOCKER_USERNAME% -p %DOCKERHUB_PSW%
+                docker tag %IMAGE_NAME%:latest %DOCKER_USERNAME%/%IMAGE_NAME%:latest
+                docker push %DOCKER_USERNAME%/%IMAGE_NAME%:latest
                 """
             }
         }
 
-        stage('Deploy') {
+        stage('Deploy Locally') {
             steps {
-                echo 'Deployment step placeholder...'
-                // Add your deployment commands here (e.g., docker run, ECS task, etc.)
+                echo 'Running Docker container locally...'
+                bat """
+                docker stop %IMAGE_NAME% || echo Container not running
+                docker rm %IMAGE_NAME% || echo Container removed
+                docker run -d -p 5000:5000 --name %IMAGE_NAME% %DOCKER_USERNAME%/%IMAGE_NAME%:latest
+                """
             }
         }
     }
 
     post {
-        success {
-            echo 'Pipeline completed successfully!'
-        }
-        failure {
-            echo 'Pipeline failed. Check the console output for errors.'
-        }
+        success { echo 'Pipeline completed successfully!' }
+        failure { echo 'Pipeline failed. Check console output for errors.' }
     }
 }
